@@ -15,16 +15,74 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk
 from multiprocessing import Manager,Process
 
+# Get a manager and create queues ready for multiprocess init
 manager = Manager()
-username = "PUTUSERNAMEHERE"
-key_matrix = [1,2,3,4,5,"q","w","e","r","t"],[4.8,6.2,6.1,6.1,4.6,1,1,1,99,1],[0,0,0,0,0,0,0,0,0,0]  # keys, interval, time_since_press
 control_loop_queue = manager.Queue()
 key_queue = manager.Queue()
 listener_control_queue = manager.Queue()
+
+# Path of Exile specifics
+username = "PUTUSERNAMEHERE"
+key_dicts = [
+    {
+        "key": "1"
+        "interval": 4.8
+        "current_time": 0
+    },
+    {
+        "key": "2"
+        "interval": 6.2
+        "current_time": 0
+    },
+    {
+        "key": "3"
+        "interval": 6.1
+        "current_time": 0
+    },
+    {
+        "key": "4"
+        "interval": 6.1
+        "current_time": 0
+    },
+    {
+        "key": "5"
+        "interval": 4.6
+        "current_time": 0
+    },
+    {
+        "key": "q"
+        "interval": 1
+        "current_time": 0
+    },
+    {
+        "key": "w"
+        "interval": 1
+        "current_time": 0
+    },
+    {
+        "key": "e"
+        "interval": 1
+        "current_time": 0
+    },
+    {
+        "key": "r"
+        "interval": 99
+        "current_time": 0
+    },
+    {
+        "key": "t"
+        "interval": 1
+        "current_time": 0
+    }
+]
+num_keys = len(key_dicts)
+
+# Reduce sleep time for more accuracy, increase it for lower CPU usage
 sleep_time = 0.01
 
 
 def main():
+    # Start the infinite loops
     control_loop = Process(target=control_loop,args=())
     control_loop.start()
     keypress_loop = Process(target=keypress_loop,args=())
@@ -35,19 +93,21 @@ def main():
         listener.join()
 
 
-def check_matrix(first_run):
+# Check all the keys to see if they are due
+def check_times(first_run):
     global key_queue
-    # For each of the ten keys in the matrix
-    for i in range(10):
-        # If this is the first time through the loop, press the key
+    global key_dicts
+    for i in range(num_keys):
+        # If this is the first time through the control loop, press the key
         if first_run == True:
-            key_queue.put(str(keymatrix[0][i]))
+            key_queue.put(key_dicts[i]["key"]))
         # If the time has run past the interval, press the key and reset the timer
-        elif (keymatrix[2][i] > keymatrix[1][i]):
-            key_queue.put(str(keymatrix[0][i]))
-            key_matrix[2][i] = 0
+        elif (key_dicts[i]["current_time"] > key_dicts[i]["interval"]):
+            key_queue.put(key_dicts[i]["key"]))
+            key_dicts[i]["current_time"] = 0
 
 
+# Pass poison pill to a queue if passed True for that queue
 def poison(control_bool, key_bool, listen_bool):
     global control_loop_queue
     global key_queue
@@ -59,7 +119,8 @@ def poison(control_bool, key_bool, listen_bool):
     if listen_bool:
         listener_control_queue.put("poison")
         
-        
+
+# Logout self, then poison all queues
 def quit():
     subprocess.run(["xdotool","key","--delay","1","Return"])
     subprocess.run(["xdotool","type","--delay","1","/exit"])
@@ -75,11 +136,10 @@ def pixel_at(x, y):
 
 
 # Wait for keys in key_queue and press them
-def keypress_loop():   
-    global key_matrix
+def keypress_loop():
     global key_queue
     while True:
-        if (!key_queue.empty()):
+        if !key_queue.empty():
             queue_get = str(key_queue.get())
             if (queue_get == "poison"):
                 break
@@ -88,12 +148,12 @@ def keypress_loop():
         time.sleep(sleep_time)
 
         
-# Defines keypress processes for keyboard listener. main ends on key release if loop is ended.
+# Defines keypress processes for keyboard listener. main ends on key release if loop is ended. I don't remember how this works, but it breaks if you don't assign.
 def on_press(key):
     key1 = 0
     
     
-# Request user waits while I'm busy
+# Request another user waits while I'm busy
 def f2_macro:
     subprocess.run(["xdotool","keydown","--delay","1","Control_L"])
     subprocess.run(["xdotool","key","--delay","1","Return"])
@@ -118,16 +178,16 @@ def f4_macro:
     subprocess.run(["xdotool","type","--delay","1","/hideout"])
     subprocess.run(["xdotool","key","--delay","1","Return"])
 
-    
+
+# Watch for the special keys
 def on_release(key):
     global control_loop_queue
-    global key_queue
     global listener_control_queue
     key_str = str(key)
 
     # Check for poison pill
     if !listener_control_queue.empty():
-        queue_get = str(listener_control_queue.get())
+        queue_get = listener_control_queue.get()
         if queue_get == "poison":
             return False
         
@@ -161,6 +221,7 @@ def pixels_check():
         
 def control_loop():
     global control_loop_queue
+    global key_dicts
     toggle_state = False
     first_run = True
 
@@ -177,19 +238,20 @@ def control_loop():
             queue_get = str(control_loop_queue.get())
             if (queue_get == "poison"):
                 break
-            else:   # queue_get == "toggle"
-                toggle_state = !toggle_state
+            # the only other option recieved by this queue is queue_get == "toggle"
+            toggle_state = !toggle_state
 
+        # If the toggle is True we will check to see if it is time to press any keys
         if toggle_state == True:
-            check_matrix(first_run)
+            check_times(first_run)
         if first_run == True:
             first_run = False
         time.sleep(sleep_time)
-        elapsed_time = time.time() - start_time
         
         # Update the timers
-        for i in range(10):
-            keymatrix[2][i] = keymatrix[2][i] + elapsed_time
+        elapsed_time = time.time() - start_time
+        for i in range(num_keys):
+            key_dicts[i]["current_time"] += elapsed_time
 
 
 if (__name__ == "__main__"):
